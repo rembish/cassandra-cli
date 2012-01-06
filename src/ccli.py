@@ -7,6 +7,8 @@ from pycassa.cassandra.ttypes import NotFoundException
 
 class App(Cmd, object):
     prompt = '> '
+    timing = True
+    
     def __init__(self, *args, **kwargs):
         super(App, self).__init__(*args, **kwargs)
 
@@ -32,8 +34,11 @@ class App(Cmd, object):
             print '*** Please connect to server'
             return
 
+        if not keyspace:
+            self.perror('Please, define keyspace')
+
         if keyspace not in self.sm.list_keyspaces():
-            print '*** Unknown keyspace %s' % keyspace
+            self.perror('Unknown keyspace %s' % keyspace)
             return
 
         self.prompt = '%s/%s> ' % (self.servers[0], keyspace)
