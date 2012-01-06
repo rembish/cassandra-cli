@@ -1,9 +1,26 @@
 from cmd2 import Cmd
 from prettytable import PrettyTable
+from pyparsing import Word, Keyword, Optional, printables
 
 from thrift.transport.TTransport import TTransportException
 from pycassa.system_manager import SystemManager
 from pycassa.cassandra.ttypes import NotFoundException
+
+class AutoCompleteWord(Word):
+    pass
+
+def check(grammar):
+    def decorator(function):
+        def proxy(self, line):
+            result = grammar.parseString(line)
+            return function(self, *result)
+
+        return proxy
+    return decorator
+
+server = Word(printables).setName('server')
+keyspace = AutoCompleteWord(printables).setName('keyspace')
+columnfamily = AutoCompleteWord(printables).setName('columnfamily')
 
 class App(Cmd, object):
     prompt = '> '
@@ -16,9 +33,8 @@ class App(Cmd, object):
         self.servers = []
         self.keyspace = None
 
-    def do_connect(self, line):
-        server = line or 'new-cass01.prague.wdf.cz' # 'localhost:9160'
-
+    @check(Optional(server, default='locahost:9160'))
+    def do_connect(self, server):
         try:
             self.sm = SystemManager(server)
         except TTransportException:
@@ -29,6 +45,7 @@ class App(Cmd, object):
         self.prompt = '%s> ' % server
         print 'Successfully connected to %s' % server
 
+    @check(keyspace)
     def do_use(self, keyspace):
         if not self.sm:
             print '*** Please connect to server'
@@ -50,12 +67,13 @@ class App(Cmd, object):
         
         return [x for x in self.sm.list_keyspaces() if x.startswith(text)]
 
-    def do_list(self, line):
+    @check(Keyword('keyspaces') | Keyword('columnfamilies'))
+    def do_list(self, space):
         if not self.sm:
             print '*** Please, connect to server'
             return
 
-        if line.startswith('keyspaces'):
+        if space == 'keyspaces':
             pt = PrettyTable(['Keyspaces'])
             pt.set_field_align("Keyspaces", "l")
 
@@ -64,7 +82,7 @@ class App(Cmd, object):
 
             pt.printt(sortby="Keyspaces")
 
-        elif line.startswith('columnfamilies'):
+        elif space == 'columnfamilies':
             if not self.keyspace:
                 print '*** Please, select keyspace, using "use" command'
                 return
@@ -77,24 +95,21 @@ class App(Cmd, object):
 
             pt.printt(sortby="ColumnFamilies")
 
-        else:
-            print '*** Unknown option %s' % line
-
     def complete_list(self, text, line, begidx, endidx):
         return [x for x in ['keyspaces', 'columnfamilies'] if x.startswith(text)]
 
-    def do_describe(self, line):
+    @check(Keyword('keyspace') + Optional(keyspace, default=None) | Keyword('columnfamily') + columnfamily)
+    def do_describe(self, space, name):
         if not self.sm:
             print '*** Please, connect to server'
             return
 
-        data = line.split(' ')
-        if line.startswith('keyspace'):
-            if len(data) < 2 and not self.keyspace:
+        if space == 'keyspace':
+            if not name and not self.keyspace:
                 print '*** Please, define keyspace'
                 return
 
-            keyspace = data[1] if len(data) > 1 else self.keyspace
+            keyspace = name or self.keyspace
             try:
                 options = self.sm.get_keyspace_properties(keyspace)
             except NotFoundException:
@@ -111,25 +126,20 @@ class App(Cmd, object):
 
             pt.printt(sortby='Keyspace')
 
-        elif line.startswith('columnfamily'):
+        elif space == 'columnfamily':
             if not self.keyspace:
                 print '*** Please, select keyspace, using "use" command'
                 return
 
-            if len(data) < 2:
-                print '*** Please, define columnfamily to describe'
-                return
-
-            columnfamily = data[1]
             try:
-                options = self.sm.get_keyspace_column_families(self.keyspace, use_dict_for_col_metadata=True)[columnfamily]
+                options = self.sm.get_keyspace_column_families(self.keyspace, use_dict_for_col_metadata=True)[name]
             except KeyError:
-                print '*** Unknown columnfamily %s' % columnfamily
+                print '*** Unknown columnfamily %s' % name
                 return
 
-            pt = PrettyTable(['ColumnFamily', columnfamily])
+            pt = PrettyTable(['ColumnFamily', name])
             pt.set_field_align("ColumnFamily", "l")
-            pt.set_field_align(columnfamily, 'r')
+            pt.set_field_align(name, 'r')
 
             for k, v in options.__dict__.items():
                 if k == 'column_metadata' and len(v):
@@ -145,9 +155,6 @@ class App(Cmd, object):
                     pt.add_row([k] + v.__dict__.values())
 
                 pt.printt(sortby='Column \ Options')
-
-        else:
-            print '*** Unknown option %s' % line
 
     def complete_describe(self, text, line, begidx, endidx):
         return [x for x in ['keyspace', 'columnfamily'] if x.startswith(text)]
