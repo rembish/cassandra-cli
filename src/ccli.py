@@ -34,10 +34,10 @@ def check_keyspace(function):
         return function(self, *args)
     return proxy
 
-server = Word(printables).setName('server')
-keyspace = AutoCompleteWord(printables).setName('keyspace')
-columnfamily = AutoCompleteWord(alphanums).setName('columnfamily')
-key = Word(printables, excludeChars=':]').setName('key')
+server = Word(printables).setName('Server')
+keyspace = AutoCompleteWord(printables).setName('Keyspace')
+columnfamily = AutoCompleteWord(alphanums).setName('ColumnFamily')
+key = Word(printables, excludeChars=':]').setName('Key')
 count = Word(nums).setName('count')
 
 class App(Cmd, object):
@@ -47,9 +47,13 @@ class App(Cmd, object):
     timing = True
     colors = True
     debug = True
-    case_insensitive = True
+
+    # O'Key, guys, you create good library with a lot of parametes, but, I think,
+    # you should test it before realese, shouldn't?
+    case_insensitive = False
 
     max_data_size = 35
+    max_rows = 50
     
     def __init__(self, *args, **kwargs):
         super(App, self).__init__(*args, **kwargs)
@@ -61,6 +65,10 @@ class App(Cmd, object):
         self.keyspace = None
 
         self.settable['max_data_size'] = 'Maximum value symbols [0 = no truncating]'
+        self.settable['max_rows'] = 'Maximum rows to receive by one get'
+
+    def func_named(self, arg):
+        return super(App, self).func_named(arg[0])
 
     @parse(Optional(server, default='locahost:9160'))
     def do_connect(self, server):
@@ -71,6 +79,10 @@ class App(Cmd, object):
         
         self.server = server
         self.prompt = '%s> ' % server
+
+        self.keyspace = None
+        self.pool = None
+
         print 'Successfully connected to %s' % server
 
     @check_connection
@@ -176,27 +188,39 @@ class App(Cmd, object):
     def completenames(self, text, *ignored):
         names = super(App, self).completenames(text, *ignored)
         if self.keyspace:
-            names.extend(self.sm.get_keyspace_column_families(self.keyspace).keys())
+            names.extend(cf for cf in
+                self.sm.get_keyspace_column_families(self.keyspace).keys()
+                if cf.startswith(text))
 
         return names
 
     def default(self, line):
+        # Ugly, ugly things...
+        line = (' '.join(line.parsed)).strip()
+
         if not self.server and not self.keyspace:
             return super(App, self).default(line)
         return self.simple_select(line)
 
-    @parse(columnfamily + Optional('[' + Combine(Optional(key, default='') + Optional(':' + Optional(key, default='') + Optional(':' + Optional(count, default=50)))) + ']'))
+    @parse(columnfamily + Optional('[' + Combine(Optional(key, default='') +
+        Optional(':' + Optional(key, default='') + Optional(':' +
+        Optional(count, default='')))) + ']')
+    )
     def simple_select(self, columnfamily, *args):
-        slice = ['', '', 50]
+        slice = ['', '', self.max_rows]
         key = None
+    
         if args and args[1]:
             if ':' not in args[1]:
                 key = args[1]
             for i, part in enumerate(args[1].split(':', 2)):
                 slice[i] = part
 
+        try:
+            cf = ColumnFamily(self.pool, columnfamily)
+        except NotFoundException:
+            return super(App, self).default(' '.join([columnfamily] + list(args)))
 
-        cf = ColumnFamily(self.pool, columnfamily.title()) # FIXME
         if key:
             pt = PrettyTable(['Key', key])
             pt.set_field_align("Key", "l")
@@ -207,6 +231,7 @@ class App(Cmd, object):
 
             return pt.printt(sortby='Key')
 
+        print slice
         data = dict(cf.get_range(start=slice[0], finish=slice[1], row_count=int(slice[2])))
 
         columns = []
@@ -223,7 +248,7 @@ class App(Cmd, object):
         for key, row in data.items():
             prow = [key]
             for column in columns:
-                value = row.get(column, self.colorize('---', 'red')).encode('ascii')
+                value = row.get(column, '---')
                 if len(value) > self.max_data_size:
                     value = value[:self.max_data_size - 3] + '...'
                     
