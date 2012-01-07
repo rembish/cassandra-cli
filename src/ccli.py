@@ -1,3 +1,4 @@
+#! /usr/bin/python
 from cmd2 import Cmd
 from prettytable import PrettyTable
 from pyparsing import Word, Keyword, Optional, Combine, printables, alphanums, nums
@@ -40,7 +41,7 @@ columnfamily = AutoCompleteWord(alphanums).setName('ColumnFamily')
 key = Word(printables, excludeChars=':]').setName('Key')
 count = Word(nums).setName('count')
 
-class App(Cmd, object):
+class CCli(Cmd, object):
     prompt = '> '
     continuation_prompt = '. '
     
@@ -48,15 +49,15 @@ class App(Cmd, object):
     colors = True
     debug = True
 
-    # O'Key, guys, you create good library with a lot of parametes, but, I think,
-    # you should test it before realese, shouldn't?
+    # O'Key, guys, you created good library with a lot of parameters, but,
+    # I think, you should test it before release, shouldn't?
     case_insensitive = False
 
     max_data_size = 35
     max_rows = 50
     
     def __init__(self, *args, **kwargs):
-        super(App, self).__init__(*args, **kwargs)
+        super(CCli, self).__init__(*args, **kwargs)
 
         self.sm = None
         self.pool = None
@@ -68,7 +69,7 @@ class App(Cmd, object):
         self.settable['max_rows'] = 'Maximum rows to receive by one get'
 
     def func_named(self, arg):
-        return super(App, self).func_named(arg[0])
+        return super(CCli, self).func_named(arg[0])
 
     @parse(Optional(server, default='locahost:9160'))
     def do_connect(self, server):
@@ -186,7 +187,7 @@ class App(Cmd, object):
         return [x for x in ['keyspace', 'columnfamily'] if x.startswith(text)]
 
     def completenames(self, text, *ignored):
-        names = super(App, self).completenames(text, *ignored)
+        names = super(CCli, self).completenames(text, *ignored)
         if self.keyspace:
             names.extend(cf for cf in
                 self.sm.get_keyspace_column_families(self.keyspace).keys()
@@ -199,7 +200,7 @@ class App(Cmd, object):
         line = (' '.join(line.parsed)).strip()
 
         if not self.server and not self.keyspace:
-            return super(App, self).default(line)
+            return super(CCli, self).default(line)
         return self.simple_select(line)
 
     @parse(columnfamily + Optional('[' + Combine(Optional(key, default='') +
@@ -219,7 +220,7 @@ class App(Cmd, object):
         try:
             cf = ColumnFamily(self.pool, columnfamily)
         except NotFoundException:
-            return super(App, self).default(' '.join([columnfamily] + list(args)))
+            return super(CCli, self).default(' '.join([columnfamily] + list(args)))
 
         if key:
             pt = PrettyTable(['Key', key])
@@ -252,10 +253,10 @@ class App(Cmd, object):
                 if len(value) > self.max_data_size:
                     value = value[:self.max_data_size - 3] + '...'
                     
-                prow.append(value)
+                prow.CCliend(value)
             pt.add_row(prow)
 
         pt.printt(sortby='Key / Column')
 
 if __name__ == '__main__':
-    App().cmdloop()
+    CCli().cmdloop()
