@@ -1,10 +1,12 @@
 from cmd2 import Cmd
 from prettytable import PrettyTable
-from pyparsing import Word, Keyword, Optional, printables
+from pyparsing import Word, Keyword, Optional, Combine, printables, alphanums, nums
 
 from thrift.transport.TTransport import TTransportException
 from pycassa.system_manager import SystemManager
 from pycassa.cassandra.ttypes import NotFoundException
+from pycassa.columnfamily import ColumnFamily
+from pycassa.pool import ConnectionPool
 
 class AutoCompleteWord(Word):
     pass
@@ -34,18 +36,31 @@ def check_keyspace(function):
 
 server = Word(printables).setName('server')
 keyspace = AutoCompleteWord(printables).setName('keyspace')
-columnfamily = AutoCompleteWord(printables).setName('columnfamily')
+columnfamily = AutoCompleteWord(alphanums).setName('columnfamily')
+key = Word(printables, excludeChars=':]').setName('key')
+count = Word(nums).setName('count')
 
 class App(Cmd, object):
     prompt = '> '
+    continuation_prompt = '. '
+    
     timing = True
+    colors = True
+    debug = True
+    case_insensitive = True
+
+    max_data_size = 35
     
     def __init__(self, *args, **kwargs):
         super(App, self).__init__(*args, **kwargs)
 
         self.sm = None
+        self.pool = None
+
         self.server = None
         self.keyspace = None
+
+        self.settable['max_data_size'] = 'Maximum value symbols [0 = no truncating]'
 
     @parse(Optional(server, default='locahost:9160'))
     def do_connect(self, server):
@@ -66,6 +81,8 @@ class App(Cmd, object):
 
         self.prompt = '%s/%s> ' % (self.server, keyspace)
         self.keyspace = keyspace
+        self.pool = ConnectionPool(keyspace, server_list=[self.server])
+        
         print 'Using %s as default keyspace' % keyspace
 
     def complete_use(self, text, line, begidx, endidx):
@@ -153,7 +170,67 @@ class App(Cmd, object):
             pt.printt(sortby='Column \ Options')
 
     def complete_describe(self, text, line, begidx, endidx):
+        self.pfeedback([text, line, begidx, endidx])
         return [x for x in ['keyspace', 'columnfamily'] if x.startswith(text)]
+
+    def completenames(self, text, *ignored):
+        names = super(App, self).completenames(text, *ignored)
+        if self.keyspace:
+            names.extend(self.sm.get_keyspace_column_families(self.keyspace).keys())
+
+        return names
+
+    def default(self, line):
+        if not self.server and not self.keyspace:
+            return super(App, self).default(line)
+        return self.simple_select(line)
+
+    @parse(columnfamily + Optional('[' + Combine(Optional(key, default='') + Optional(':' + Optional(key, default='') + Optional(':' + Optional(count, default=50)))) + ']'))
+    def simple_select(self, columnfamily, *args):
+        slice = ['', '', 50]
+        key = None
+        if args and args[1]:
+            if ':' not in args[1]:
+                key = args[1]
+            for i, part in enumerate(args[1].split(':', 2)):
+                slice[i] = part
+
+
+        cf = ColumnFamily(self.pool, columnfamily.title()) # FIXME
+        if key:
+            pt = PrettyTable(['Key', key])
+            pt.set_field_align("Key", "l")
+            pt.set_field_align(key, 'r')
+
+            for k, v in cf.get(key).items():
+                pt.add_row([k, (v[:self.max_data_size - 3] + '...' if self.max_data_size and len(v) > self.max_data_size else v)])
+
+            return pt.printt(sortby='Key')
+
+        data = dict(cf.get_range(start=slice[0], finish=slice[1], row_count=int(slice[2])))
+
+        columns = []
+        for key, row in data.items():
+            columns.extend(row.keys())
+        columns = list(set(columns))
+        columns.sort()
+
+        pt = PrettyTable(['Key / Column'] + columns)
+        pt.set_field_align("Key / Column", "l")
+        for column in columns:
+            pt.set_field_align(column, "r")
+
+        for key, row in data.items():
+            prow = [key]
+            for column in columns:
+                value = row.get(column, self.colorize('---', 'red')).encode('ascii')
+                if len(value) > self.max_data_size:
+                    value = value[:self.max_data_size - 3] + '...'
+                    
+                prow.append(value)
+            pt.add_row(prow)
+
+        pt.printt(sortby='Key / Column')
 
 if __name__ == '__main__':
     App().cmdloop()
