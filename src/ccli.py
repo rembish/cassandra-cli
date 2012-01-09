@@ -232,7 +232,6 @@ class CCli(Cmd, object):
 
             return pt.printt(sortby='Key')
 
-        print slice
         data = dict(cf.get_range(start=slice[0], finish=slice[1], row_count=int(slice[2])))
 
         columns = []
@@ -253,7 +252,7 @@ class CCli(Cmd, object):
                 if len(value) > self.max_data_size:
                     value = value[:self.max_data_size - 3] + '...'
                     
-                prow.CCliend(value)
+                prow.append(value)
             pt.add_row(prow)
 
         pt.printt(sortby='Key / Column')
