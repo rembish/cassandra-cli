@@ -257,5 +257,8 @@ class CCli(Cmd, object):
 
         pt.printt(sortby='Key / Column')
 
-if __name__ == '__main__':
+def main():
     CCli().cmdloop()
+
+if __name__ == '__main__':
+    main()
