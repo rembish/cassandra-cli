@@ -110,23 +110,25 @@ class CCli(Cmd, object):
         return getattr(self, 'list_%s' % space)()
 
     def list_keyspaces(self):
-        pt = PrettyTable(['Keyspaces'])
-        pt.set_field_align("Keyspaces", "l")
+        pt = PrettyTable()
+        pt._set_field_names(['Keyspaces'])
+        pt.align = 'l'
 
         for ks in self.sm.list_keyspaces():
             pt.add_row([ks])
 
-        pt.printt(sortby="Keyspaces")
+        print pt.get_string(sortby="Keyspaces")
 
     @check_keyspace
     def list_columnfamilies(self):
-        pt = PrettyTable(['ColumnFamilies'])
-        pt.set_field_align("ColumnFamilies", "l")
+        pt = PrettyTable()
+        pt._set_field_names(['ColumnFamilies'])
+        pt.align = 'l'
 
         for cf in self.sm.get_keyspace_column_families(self.keyspace).keys():
             pt.add_row([cf])
 
-        pt.printt(sortby="ColumnFamilies")
+        print pt.get_string(sortby="ColumnFamilies")
 
     def complete_list(self, text, line, begidx, endidx):
         return [x for x in ['keyspaces', 'columnfamilies'] if x.startswith(text)]
@@ -146,15 +148,16 @@ class CCli(Cmd, object):
         except NotFoundException:
             return self.perror('Unknown keyspace %s' % keyspace)
 
-        pt = PrettyTable(['Keyspace', keyspace])
-        pt.set_field_align("Keyspace", "l")
-        pt.set_field_align(keyspace, 'r')
+        pt = PrettyTable()
+        pt._set_field_names(['Keyspace', keyspace])
+        pt.align["Keyspace"] = "l"
+        pt.align[keyspace] = 'r'
 
         pt.add_row(['replication_strategy', options['replication_strategy']])
         for k, v in options['strategy_options'].items():
             pt.add_row([k, v])
 
-        pt.printt(sortby='Keyspace')
+        print pt.get_string(sortby='Keyspace')
 
     @check_keyspace
     def describe_columnfamily(self, columnfamily):
@@ -163,27 +166,28 @@ class CCli(Cmd, object):
         except KeyError:
             return self.perror('Unknown columnfamily %s' % columnfamily)
 
-        pt = PrettyTable(['ColumnFamily', columnfamily])
-        pt.set_field_align("ColumnFamily", "l")
-        pt.set_field_align(columnfamily, 'r')
+        pt = PrettyTable()
+        pt._set_field_names(['ColumnFamily', columnfamily])
+        pt.align["ColumnFamily"] = "l"
+        pt.align[columnfamily] = 'r'
 
         for k, v in options.__dict__.items():
             if k == 'column_metadata' and len(v):
                 continue
             pt.add_row([k, v])
 
-        pt.printt(sortby='ColumnFamily')
+        print pt.get_string(sortby='ColumnFamily')
 
         if len(options.column_metadata):
-            pt = PrettyTable(['Column \ Options'] + options.column_metadata.values()[0].__dict__.keys())
+            pt = PrettyTable()
+            pt._set_field_names(['Column \ Options'] + options.column_metadata.values()[0].__dict__.keys())
 
             for k, v in options.column_metadata.items():
                 pt.add_row([k] + v.__dict__.values())
 
-            pt.printt(sortby='Column \ Options')
+            print pt.get_string(sortby='Column \ Options')
 
     def complete_describe(self, text, line, begidx, endidx):
-        self.pfeedback([text, line, begidx, endidx])
         return [x for x in ['keyspace', 'columnfamily'] if x.startswith(text)]
 
     def completenames(self, text, *ignored):
@@ -223,14 +227,16 @@ class CCli(Cmd, object):
             return super(CCli, self).default(' '.join([columnfamily] + list(args)))
 
         if key:
-            pt = PrettyTable(['Key', key])
-            pt.set_field_align("Key", "l")
-            pt.set_field_align(key, 'r')
+            pt = PrettyTable()
+            pt._set_field_names(['Key', key])
+            pt.align["Key"] = "l"
+            pt.align[key] = 'r'
 
             for k, v in cf.get(key).items():
                 pt.add_row([k, (v[:self.max_data_size - 3] + '...' if self.max_data_size and len(v) > self.max_data_size else v)])
 
-            return pt.printt(sortby='Key')
+            print pt.get_string(sortby='Key')
+            return
 
         data = dict(cf.get_range(start=slice[0], finish=slice[1], row_count=int(slice[2])))
 
@@ -240,10 +246,11 @@ class CCli(Cmd, object):
         columns = list(set(columns))
         columns.sort()
 
-        pt = PrettyTable(['Key / Column'] + columns)
-        pt.set_field_align("Key / Column", "l")
+        pt = PrettyTable()
+        pt._set_field_names(['Key / Column'] + columns)
+        pt.align["Key / Column"] = "l"
         for column in columns:
-            pt.set_field_align(column, "r")
+            pt.align[column] = "r"
 
         for key, row in data.items():
             prow = [key]
@@ -255,7 +262,7 @@ class CCli(Cmd, object):
                 prow.append(value)
             pt.add_row(prow)
 
-        pt.printt(sortby='Key / Column')
+        print pt.get_string(sortby='Key / Column')
 
 def main():
     CCli().cmdloop()
