@@ -8,7 +8,7 @@ setup(
     name='cassandra-cli',
     version=__version__,
     description='Cassandra Console Interface (MySQL client like)',
-    long_description=open(readme).readlines(),
+    long_description="".join(open(readme).readlines()),
     packages=find_packages(),
     entry_points={
         'console_scripts': [
