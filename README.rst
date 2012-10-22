@@ -1,3 +1,2 @@
 Cassandra Command-Line Interface
 ================================
-

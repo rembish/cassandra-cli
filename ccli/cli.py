@@ -111,7 +111,7 @@ class CCli(Cmd, object):
 
     def list_keyspaces(self):
         pt = PrettyTable()
-        pt._set_field_names(['Keyspaces'])
+        pt.field_names = ['Keyspaces']
         pt.align = 'l'
 
         for ks in self.sm.list_keyspaces():
@@ -122,7 +122,7 @@ class CCli(Cmd, object):
     @check_keyspace
     def list_columnfamilies(self):
         pt = PrettyTable()
-        pt._set_field_names(['ColumnFamilies'])
+        pt.field_names = ['ColumnFamilies']
         pt.align = 'l'
 
         for cf in self.sm.get_keyspace_column_families(self.keyspace).keys():
@@ -149,7 +149,7 @@ class CCli(Cmd, object):
             return self.perror('Unknown keyspace %s' % keyspace)
 
         pt = PrettyTable()
-        pt._set_field_names(['Keyspace', keyspace])
+        pt.field_names = ['Keyspace', keyspace]
         pt.align["Keyspace"] = "l"
         pt.align[keyspace] = 'r'
 
@@ -167,7 +167,7 @@ class CCli(Cmd, object):
             return self.perror('Unknown columnfamily %s' % columnfamily)
 
         pt = PrettyTable()
-        pt._set_field_names(['ColumnFamily', columnfamily])
+        pt.field_names = ['ColumnFamily', columnfamily]
         pt.align["ColumnFamily"] = "l"
         pt.align[columnfamily] = 'r'
 
@@ -180,7 +180,7 @@ class CCli(Cmd, object):
 
         if len(options.column_metadata):
             pt = PrettyTable()
-            pt._set_field_names(['Column \ Options'] + options.column_metadata.values()[0].__dict__.keys())
+            pt.field_names = ['Column \ Options'] + options.column_metadata.values()[0].__dict__.keys()
 
             for k, v in options.column_metadata.items():
                 pt.add_row([k] + v.__dict__.values())
@@ -228,7 +228,7 @@ class CCli(Cmd, object):
 
         if key:
             pt = PrettyTable()
-            pt._set_field_names(['Key', key])
+            pt.field_names = ['Key', key]
             pt.align["Key"] = "l"
             pt.align[key] = 'r'
 
@@ -247,7 +247,7 @@ class CCli(Cmd, object):
         columns.sort()
 
         pt = PrettyTable()
-        pt._set_field_names(['Key / Column'] + columns)
+        pt.field_names = ['Key / Column'] + columns
         pt.align["Key / Column"] = "l"
         for column in columns:
             pt.align[column] = "r"
