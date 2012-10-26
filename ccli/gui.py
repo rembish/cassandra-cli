@@ -1,45 +1,20 @@
-import curses
-
 from ccli.client import Client
+from urwid import MainLoop, Frame, Text, ExitMainLoop, Filler, Pile, Divider
+from ccli.command import CommandEdit
 
 class Gui(object):
     def __init__(self, verbose=0, **kwargs):
         self.client = Client(**kwargs)
-        self.screen = None
 
-        self.command_line = None
+    @property
+    def caption(self):
+        return '%s> ' % self.client.caption
 
-    def __call__(self):
-        curses.wrapper(self.run)
-
-    def run(self, stdscr):
-        self.screen = stdscr
-        self.screen.keypad(1)
-
-        curses.use_default_colors()
-        curses.init_pair(1, -1, -1);
-        curses.init_pair(2, curses.COLOR_YELLOW, -1);
-        curses.init_pair(3, curses.COLOR_GREEN, -1);
-        curses.init_pair(4, curses.COLOR_CYAN, -1);
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1);
-        curses.init_pair(6, curses.COLOR_RED, -1);
-
-        maxy, maxx = self.screen.getmaxyx()
-
-        self.command_line = curses.newwin(10, 10, 10, 10)
-        self.command_line.box()
-        self.command_line.refresh()
-        self.screen.refresh()
-
-        while True:
-            try:
-                event = self.screen.getch()
-            except KeyboardInterrupt:
-                break
-
-            if event == curses.KEY_F10:
-                break
-
-            #self.screen.move(0, 1)
-            self.screen.addstr(str(event))
-
+    def run(self):
+        board = Filler(Text(u''), valign='top')
+        footer = Pile([
+            Divider(div_char=u'\u2500'),
+            CommandEdit(caption=self.caption, board=board)
+        ], focus_item=1)
+        screen = Frame(board, footer=footer, focus_part='footer')
+        MainLoop(screen).run()

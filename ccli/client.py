@@ -26,3 +26,9 @@ class Client(object):
                 )
             except InvalidRequestException:
                 raise CCliClientKeyspaceError("Unknown keyspace '%s'" % keyspace)
+
+    @property
+    def caption(self):
+        if self.pool:
+            return '%s/%s' % (self.manager._conn.server, self.pool.keyspace)
+        return self.manager._conn.server

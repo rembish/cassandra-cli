@@ -58,7 +58,7 @@ def main(args=argv[1:]):
                 host=options.host, port=options.port, keyspace=options.keyspace,
                 username=options.username, password=options.password, timeout=options.timeout,
                 verbose=options.verbose
-            )()
+            ).run()
         except Exception as e:
             if options.verbose >= 2:
                 raise
