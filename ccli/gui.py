@@ -17,4 +17,8 @@ class Gui(object):
             CommandEdit(caption=self.caption, board=board)
         ], focus_item=1)
         screen = Frame(board, footer=footer, focus_part='footer')
-        MainLoop(screen).run()
+
+        try:
+            MainLoop(screen).run()
+        except KeyboardInterrupt:
+            pass

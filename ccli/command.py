@@ -1,40 +1,61 @@
-from cStringIO import StringIO
-from pyreadline import Readline
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
-from cmd2 import Cmd
-from ccli.oldcli import CCli
 from urwid import Edit, ExitMainLoop
+from cmd2 import Cmd
+
+from ccli.history import History
 
 class CommandEdit(Edit):
     def __init__(self, board, *args, **kwargs):
         super(CommandEdit, self).__init__(*args, **kwargs)
         self.board = board
 
-        self.readline = Readline()
-        self.readline.set_completer(self.complete)
-        self.readline.parse_and_bind('tab: complete')
-
         self.stdout = StringIO()
         self.cmd = Cmd(stdout=self.stdout)
 
-    def complete(self, text, state):
-        return map(str, [text, state])
+        self.history = History()
+        self.mapping = {
+            'up': self.previous,
+            'down': self.next,
+            'ctrl r': self.search,
+            'tab': self.autocomplete,
+            'enter': self.do,
+        }
 
     def keypress(self, size, key):
-        if key not in ['enter', 'tab']:
-            return super(CommandEdit, self).keypress(size, key)
+        return self.mapping.get(key, lambda: super(CommandEdit, self).keypress(size, key))()
 
-        line = self.get_edit_text()
-        if key == 'tab':
-            variants = self.cmd.complete(line, state=0)
-            self.board.base_widget.set_text(', '.join(variants or []) or '')
-            return
+    def previous(self):
+        self.set_edit_text(self.history.up() or '')
+    def next(self):
+        self.set_edit_text(self.history.down() or '')
 
+    def search(self):
+        position = self.edit_pos
+        query = self.edit_text[:self.edit_pos]
+        result = self.history.search(query)
+
+        if result:
+            self.edit_text = result
+            self.edit_pos = position
+
+    def autocomplete(self):
+        line = self.edit_text
+        parsed = self.cmd.parsed(line)
+        self.board.base_widget.set_text(parsed.parsed.dump())
+
+    def do(self):
+        line = self.edit_text
         stop = self.cmd.onecmd(line)
         if stop:
             raise ExitMainLoop()
 
         self.stdout.reset()
-        self.board.base_widget.set_text(self.stdin.read())
+        self.board.base_widget.set_text(self.stdout.read())
+        self.stdout.truncate()
 
         self.set_edit_text(u'')
+        self.history.append(line)
