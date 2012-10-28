@@ -5,7 +5,7 @@ from sys import version_info, argv
 from pycassa import __version__ as pycassa_version
 
 from ccli import __version__ as ccli_version
-from ccli.gui import Gui
+from ccli.gui import GUI
 
 def process_password(option, opt_str, value, parser):
     if parser.rargs and not parser.rargs[0].startswith('-'):
@@ -16,7 +16,7 @@ def process_password(option, opt_str, value, parser):
 
     setattr(parser.values, option.dest, v)
 
-def main(args=argv[1:]):
+def CLI(args=argv[1:]):
     parser = OptionParser(
         version='cassandra-cli/%s (using pycassa/%s, Python/%s)' % (
             ccli_version, pycassa_version, '.'.join(map(str, version_info[:3]))
@@ -54,7 +54,7 @@ def main(args=argv[1:]):
         parser.print_version()
     else:
         try:
-            Gui(
+            GUI(
                 host=options.host, port=options.port, keyspace=options.keyspace,
                 username=options.username, password=options.password, timeout=options.timeout,
                 verbose=options.verbose
@@ -66,4 +66,4 @@ def main(args=argv[1:]):
             print 'CCLI ERROR: %s' % str(e)
 
 if __name__ == '__main__':
-    main(argv)
+    CLI(argv)

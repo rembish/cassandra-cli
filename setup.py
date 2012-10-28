@@ -12,7 +12,7 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'cassandra-cli = ccli.cli:main',
+            'cassandra-cli = ccli.cli:CLI',
         ]
     },
     url='https://github.com/don-ramon/cassandra-cli',
