@@ -82,18 +82,19 @@ class CommandLine(Edit, CommandsMixin):
 
     def autocomplete(self):
         result = self.complete(self.edit_text[:self.edit_pos], 0)
-        if len(self.completion_matches) == 1:
+        matches = set(self.completion_matches)
+        if len(matches) == 1:
             word = self.edit_text[:self.edit_pos].rsplit(' ')[-1]
             self.insert_text('%s ' % result[len(word):])
-        elif self.completion_matches:
-            self._emit('show_autocomplete', self.completion_matches)
+        elif matches:
+            self._emit('show_autocomplete', matches)
 
     def do(self):
         line = self.edit_text
         result = self.onecmd(line)
 
         self.stdout.reset()
-        self.board.base_widget.set_text(result)
+        self.board.base_widget.set_text(result or self.stdout.read())
         self.stdout.truncate()
 
         self.set_edit_text(u'')
