@@ -51,6 +51,8 @@ class CommandLine(Edit, CommandsMixin):
         self.board = board
         self.client = client
 
+        self.set_caption('%s> ' % self.client.caption)
+
         self.history = History()
         self.mapping = {
             'up': self.previous,

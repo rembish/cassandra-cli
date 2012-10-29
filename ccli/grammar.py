@@ -2,7 +2,15 @@ from pyparsing import Literal, Word, Optional, QuotedString, Combine, restOfLine
 from pyparsing import cppStyleComment, dblSlashComment
 from pyparsing import alphas, alphanums, nums, hexnums
 
+'''
+    See also http://cassandra.apache.org/doc/cql/CQL.html
+'''
+
 unary_minus = Literal('-')
+
+lpar = Literal('(').suppress()
+rpar = Literal(')').suppress()
+semicolon = Literal(';').suppress()
 
 comment_inline = (Literal('--')  + restOfLine) | dblSlashComment
 comment_multi = cppStyleComment
@@ -33,25 +41,25 @@ use_statement = CaselessKeyword('use') + term
 relation_operator = Literal('=') | Literal('<=') | Literal('>=') | Literal('<') | Literal('>')
 relation = Group(term + relation_operator + term)
 select_where_clause = Group(delimitedList(relation, delim=CaselessKeyword('and'))) \
-    | Group(term + CaselessKeyword('in') + Literal('(') + Group(delimitedList(term)) + Literal(')'))
+    | Group(term + CaselessKeyword('in') + lpar + Group(delimitedList(term)) + rpar)
 column_range = Group(term + Literal('..') + term) | Literal('*')
 count_target = Literal('*') | Literal('1')
 what_to_select = (Optional(CaselessKeyword('first') + integer) + Optional(CaselessKeyword('reversed')) + column_range) \
-    | (CaselessKeyword('count') + Literal('(') + count_target + Literal(')')) \
+    | (CaselessKeyword('count') + lpar + count_target + rpar) \
     | Group(delimitedList(term))
-select_statement = CaselessKeyword('select') + what_to_select + CaselessKeyword('from') + Group(Optional(name + Literal('.')) + name) \
+select_statement = CaselessKeyword('select') + what_to_select + CaselessKeyword('from') + Combine(Optional(name + Literal('.')) + name) \
     + Optional(CaselessKeyword('using') + CaselessKeyword('consistency') + consistency) \
     + Optional(CaselessKeyword('where') + select_where_clause) + Optional(CaselessKeyword('limit') + integer)
 
 delete_option = Group(CaselessKeyword('consistency') + consistency) | Group(CaselessKeyword('timestamp') + integer)
 using_option =  delete_option | Group(CaselessKeyword('ttl') + integer)
 using_clause = CaselessKeyword('using') + Group(delimitedList(using_option, delim=CaselessKeyword('and')))
-insert_statement = CaselessKeyword('insert') + CaselessKeyword('into') + name + Literal('(') + Group(delimitedList(term)) \
-    + Literal(')') + CaselessKeyword('values') + Literal('(') + Group(delimitedList(term)) + Literal(')') \
+insert_statement = CaselessKeyword('insert') + CaselessKeyword('into') + name + lpar + Group(delimitedList(term)) \
+    + rpar + CaselessKeyword('values') + lpar + Group(delimitedList(term)) + rpar \
     + Optional(using_clause)
 
-update_where_clause = (term + Literal('=') + term) | (term + CaselessKeyword('in') + Literal('(') + Group(delimitedList(term)) \
-    + Literal(')'))
+update_where_clause = (term + Literal('=') + term) | (term + CaselessKeyword('in') + lpar + Group(delimitedList(term)) \
+    + rpar)
 assignment = Group(term + Literal('=') + term + Literal('+') + term) \
     | Group(term + Literal('=') + term + Literal('-') + term) \
     | Group(term + Literal('=') + term)
@@ -67,21 +75,21 @@ truncate_statement = CaselessKeyword('truncate') + name
 
 batch_statement_member = insert_statement | update_statement | delete_statement
 batch_statement = CaselessKeyword('begin') + CaselessKeyword('batch') + Optional(using_clause) \
-    + Group(delimitedList(batch_statement_member, delim=';')) + CaselessKeyword('apply') + CaselessKeyword('batch')
+    + Group(delimitedList(batch_statement_member, delim=semicolon)) + CaselessKeyword('apply') + CaselessKeyword('batch')
 
-option_name = Group(delimitedList(identifier, delim=':'))
+option_name = Combine(delimitedList(identifier, delim=':'))
 option_value = string_literal | identifier | integer
 create_keyspace_statement = CaselessKeyword('create') + CaselessKeyword('keyspace') + name + CaselessKeyword('with') \
     + Group(delimitedList(Group(option_name + Literal('=') + option_value), delim=CaselessKeyword('and')))
 
 column_family_option_value = storage_type | identifier | string_literal | float | integer
 create_column_family_statement = CaselessKeyword('create') + CaselessKeyword('columnfamily') + name \
-    + Literal('(') + Group(Group(term + storage_type + CaselessKeyword('primary') + CaselessKeyword('key')) \
-    + ZeroOrMore(Group(Literal(',').suppress() + term + storage_type))) + Literal(')') + Optional(CaselessKeyword('with') \
+    + lpar + Group(Group(term + storage_type + CaselessKeyword('primary') + CaselessKeyword('key')) \
+    + ZeroOrMore(Group(Literal(',').suppress() + term + storage_type))) + rpar + Optional(CaselessKeyword('with') \
     + Group(delimitedList(Group(identifier + Literal('=') + column_family_option_value), delim=CaselessKeyword('and'))))
 
 create_index_statement = CaselessKeyword('create') + CaselessKeyword('index') + (CaselessKeyword('on') | identifier \
-    + CaselessKeyword('on')) + name + Literal('(') + term + Literal(')')
+    + CaselessKeyword('on')) + name + lpar + term + rpar
 
 drop_keyspace_statement = CaselessKeyword('drop') + CaselessKeyword('keyspace') + name
 drop_column_family_statement = CaselessKeyword('drop') + CaselessKeyword('columnfamily') + name
@@ -95,10 +103,11 @@ schema_change_statement = create_keyspace_statement | create_column_family_state
     | drop_keyspace_statement | drop_column_family_statement | drop_index_statement | alter_column_family_statement
 data_change_statement = insert_statement | update_statement | batch_statement | delete_statement | truncate_statement
 statement_body = use_statement | select_statement | data_change_statement | schema_change_statement
-statement = statement_body + Literal(';')
+statement = statement_body + semicolon
 
 if __name__ == '__main__':
     tests = [
+        "USE myApp;",
         "SELECT Name, Occupation FROM People WHERE key IN (199, 200, 207);",
         "SELECT FIRST 3 REVERSED 'time199'..'time100' FROM Events;",
         "SELECT COUNT(*) FROM system.Migrations;",
@@ -152,4 +161,4 @@ APPLY BATCH;""",
     ]
 
     for test in tests:
-        statement.parseString(test)
+        print statement.parseString(test)
