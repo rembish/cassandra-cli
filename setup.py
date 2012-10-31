@@ -20,9 +20,6 @@ setup(
     author_email='alex@rembish.ru',
     install_requires=[
         'pycassa',
-        'pyparsing',
-        'cmd2',
-        'prettytable',
         'modgrammar-py2',
     ]
 )

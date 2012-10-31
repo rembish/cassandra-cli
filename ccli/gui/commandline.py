@@ -3,7 +3,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 
-from urwid import Edit, ExitMainLoop, PopUpLauncher, connect_signal
+from urwid import Edit, PopUpLauncher, connect_signal
 
 from ccli.history import History
 from ccli.commands import CommandsMixin
@@ -28,7 +28,7 @@ class CommandLineWrapper(PopUpLauncher):
 
         text = self.original_widget
         word = text.edit_text[:text.edit_pos].rsplit(' ')[-1]
-        text.insert_text('%s ' % popup.result[len(word):])
+        text.insert_text(popup.result[len(word):])
 
     def create_pop_up(self):
         popup = AutocompletePopup(self.variants)
@@ -44,13 +44,9 @@ class CommandLine(Edit, CommandsMixin):
     signals = ['change', 'show_autocomplete']
     def __init__(self, board, client, *args, **kwargs):
         super(CommandLine, self).__init__(*args, **kwargs)
-
-        self.stdout = StringIO()
-        CommandsMixin.__init__(self, client, stdout=self.stdout)
+        CommandsMixin.__init__(self, client)
 
         self.board = board
-        self.client = client
-
         self.set_caption('%s> ' % self.client.caption)
 
         self.history = History()
@@ -83,12 +79,11 @@ class CommandLine(Edit, CommandsMixin):
             self.edit_pos = position
 
     def autocomplete(self):
-        result = self.complete(self.edit_text[:self.edit_pos], 0)
-        raise Exception(result)
-        matches = set(self.completion_matches)
+        matches = self.complete(self.edit_text, self.edit_pos)
         if len(matches) == 1:
+            match = matches[0]
             word = self.edit_text[:self.edit_pos].rsplit(' ')[-1]
-            self.insert_text('%s ' % result[len(word):])
+            self.insert_text(match.keyword[0 if match.type == 'operator' else len(word):])
         elif matches:
             self._emit('show_autocomplete', matches)
 
@@ -96,9 +91,7 @@ class CommandLine(Edit, CommandsMixin):
         line = self.edit_text
         result = self.onecmd(line)
 
-        self.stdout.reset()
-        self.board.base_widget.set_text(result or self.stdout.read())
-        self.stdout.truncate()
+        self.board.base_widget.set_text(result)
 
         self.set_edit_text(u'')
         self.history.append(line)

@@ -1,4 +1,4 @@
-from modgrammar import Grammar, WORD, OPTIONAL, OR, LIST_OF, ParseError, GrammarClass, ZERO_OR_MORE, L, Literal, generate_ebnf
+from modgrammar import Grammar, WORD, OPTIONAL, OR, LIST_OF, ParseError, GrammarClass, ZERO_OR_MORE, L, Literal
 from modgrammar.extras import QuotedString, RE, REGrammar
 from modgrammar.util import make_classdict
 
@@ -10,20 +10,30 @@ def CK(string, **kwargs): # Caseless Keyword
     re = ''.join(["[%s%s]" % (c.lower(), c.upper()) for c in string])
     cdict = make_classdict(REGrammar, (), kwargs, regexp=re, grammar_name="CK({0!r})".format(string))
     instance = GrammarClass("CK<%s>" % string, (REGrammar,), cdict)
-    instance.keyword = string
+    instance.keyword = '%s ' % string
+    instance.type = 'keyword'
     return instance
 
 def OP(string, **kwargs): # Operator
     cdict = make_classdict(Literal, (), kwargs, string=string, grammar_name="OP({0!r})".format(string))
     instance = GrammarClass("<OPERATOR>", (Literal,), cdict)
     instance.keyword = string
+    instance.type = 'operator'
+    return instance
+
+def FN(string, **kwargs): # Caseless Function
+    re = ''.join(["[%s%s]" % (c.lower(), c.upper()) for c in string])
+    cdict = make_classdict(REGrammar, (), kwargs, regexp=re, grammar_name="FN({0!r})".format(string))
+    instance = GrammarClass("FN<%s>" % string, (REGrammar,), cdict)
+    instance.keyword = '%s(' % string
+    instance.type = 'function'
     return instance
 
 class LPar(Grammar):
     grammar = OP('(')
 
 class RPar(Grammar):
-    grammar = OP(')')
+    grammar = OP(') ')
 
 class Identifier(Grammar):
     grammar = WORD('a-zA-Z', 'a-zA-Z0-9_')
@@ -74,7 +84,7 @@ class CountTarget(Grammar):
 class WhatToSelect(Grammar):
     grammar = OR(
         (OPTIONAL(CK('first'), Integer, OPTIONAL(CK('reversed'))), ColumnRange),
-        (CK('count'), LPar, CountTarget, RPar), LIST_OF(Term)
+        (FN('count'), LPar, CountTarget, RPar), LIST_OF(Term)
     )
 
 class SelectStatement(Grammar):
@@ -163,6 +173,9 @@ class AlterInstructions(Grammar):
 class AlterColumnFamilyStatement(Grammar):
     grammar = (CK('alter'), CK('columnfamily'), Name, AlterInstructions)
 
+class QuitStatement(Grammar):
+    grammar = OR(CK('quit'), CK('exit'))
+
 class SchemaChangeStatement(Grammar):
     grammar = OR(
         CreateKeyspaceStatement, CreateColumnFamilyStatement, CreateIndexStatement,
@@ -173,8 +186,11 @@ class SchemaChangeStatement(Grammar):
 class DataChangeStatement(Grammar):
     grammar = OR(InsertStatement, UpdateStatement, BatchStatement, DeleteStatement, TruncateStatement)
 
+class ClientStatement(Grammar):
+    grammar = OR(QuitStatement)
+
 class StatementBody(Grammar):
-    grammar = OR(UseStatement, SelectStatement, DataChangeStatement, SchemaChangeStatement)
+    grammar = OR(UseStatement, SelectStatement, DataChangeStatement, SchemaChangeStatement, ClientStatement)
 
 class Statement(Grammar):
     grammar = (StatementBody, OP(';'))
@@ -239,7 +255,7 @@ APPLY BATCH;""",
 
     parser = Statement.parser()
     try:
-        parser.parse_string('select', eof=True)
+        parser.parse_string('', eof=True)
     except ParseError as e:
         print [t.keyword for t in e.expected if t.grammar_name[:2] in ['OP', 'CK']]
 

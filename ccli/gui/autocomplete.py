@@ -1,8 +1,9 @@
-from urwid import AttrWrap, Text, WidgetWrap, Filler, Columns, connect_signal
+from urwid import AttrWrap, Text, WidgetWrap, Filler, Columns
 
 class Variant(AttrWrap):
-    def __init__(self, parent, markup, attr, focus_attr=None, **kwargs):
-        super(Variant, self).__init__(Text(markup, **kwargs), attr, focus_attr=focus_attr)
+    def __init__(self, parent, token, attr, focus_attr=None, **kwargs):
+        super(Variant, self).__init__(Text(token.keyword, **kwargs), attr, focus_attr=focus_attr)
+        self.token = token
         self.parent = parent
 
     def keypress(self, size, key):
@@ -13,7 +14,12 @@ class Variant(AttrWrap):
             return
 
         if key == 'enter':
-            self.parent.result = self.text
+            self.parent.result = self.token.keyword
+        if key == ' ':
+            self.parent.result = self.token.keyword
+            if self.token.keyword[-1] != ' ' and self.token.type != 'function':
+                self.parent.result += ' '
+
         self.parent._emit('hide_autocomplete', size, key)
 
 class AutocompletePopup(WidgetWrap):
@@ -22,6 +28,6 @@ class AutocompletePopup(WidgetWrap):
 
     def __init__(self, variants):
         super(AutocompletePopup, self).__init__(Filler(Columns([
-            (10, Variant(self, word, 'complete', focus_attr='complete_selected')) for word in variants
+            (15, Variant(self, word, 'complete', focus_attr='complete_selected')) for word in variants
         ])))
         self.result = None
