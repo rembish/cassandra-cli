@@ -23,5 +23,6 @@ setup(
         'pyparsing',
         'cmd2',
         'prettytable',
+        'modgrammar-py2',
     ]
 )

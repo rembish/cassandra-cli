@@ -2,7 +2,7 @@ from cmd import Cmd
 from urwid import ExitMainLoop
 
 from ccli.errors import CCliClientKeyspaceError
-from ccli.grammar import use_statement
+#from ccli.grammar import use_statement
 
 def parse(grammar):
     def decorator(function):
@@ -22,7 +22,7 @@ class CommandsMixin(Cmd):
         raise ExitMainLoop()
     do_exit = do_quit
 
-    @parse(use_statement)
+    #@parse(use_statement)
     def do_use(self, keyspace):
         try:
             self.client.keyspace = keyspace
@@ -30,3 +30,7 @@ class CommandsMixin(Cmd):
             return ''
         except CCliClientKeyspaceError as e:
             return str(e)
+
+    def completedefault(self, *words):
+        self.board.base_widget.set_text(repr(words))
+        return []

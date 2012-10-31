@@ -84,6 +84,7 @@ class CommandLine(Edit, CommandsMixin):
 
     def autocomplete(self):
         result = self.complete(self.edit_text[:self.edit_pos], 0)
+        raise Exception(result)
         matches = set(self.completion_matches)
         if len(matches) == 1:
             word = self.edit_text[:self.edit_pos].rsplit(' ')[-1]

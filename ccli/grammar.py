@@ -1,109 +1,183 @@
-from pyparsing import Literal, Word, Optional, QuotedString, Combine, restOfLine, CaselessKeyword, delimitedList, ZeroOrMore, Group, Empty
-from pyparsing import cppStyleComment, dblSlashComment
-from pyparsing import alphas, alphanums, nums, hexnums
+from modgrammar import Grammar, WORD, OPTIONAL, OR, LIST_OF, ParseError, GrammarClass, ZERO_OR_MORE, L, Literal, generate_ebnf
+from modgrammar.extras import QuotedString, RE, REGrammar
+from modgrammar.util import make_classdict
 
 '''
     See also http://cassandra.apache.org/doc/cql/CQL.html
 '''
 
-unary_minus = Literal('-')
+def CK(string, **kwargs): # Caseless Keyword
+    re = ''.join(["[%s%s]" % (c.lower(), c.upper()) for c in string])
+    cdict = make_classdict(REGrammar, (), kwargs, regexp=re, grammar_name="CK({0!r})".format(string))
+    instance = GrammarClass("CK<%s>" % string, (REGrammar,), cdict)
+    instance.keyword = string
+    return instance
 
-lpar = Literal('(').suppress()
-rpar = Literal(')').suppress()
-semicolon = Literal(';').suppress()
+def OP(string, **kwargs): # Operator
+    cdict = make_classdict(Literal, (), kwargs, string=string, grammar_name="OP({0!r})".format(string))
+    instance = GrammarClass("<OPERATOR>", (Literal,), cdict)
+    instance.keyword = string
+    return instance
 
-comment_inline = (Literal('--')  + restOfLine) | dblSlashComment
-comment_multi = cppStyleComment
+class LPar(Grammar):
+    grammar = OP('(')
 
-identifier = Combine(Word(alphas) + Optional(Word(alphanums + '_')))
-string_literal = QuotedString(quoteChar="'", escChar="''", multiline=False)
-integer = Combine(Optional(unary_minus) + Word(nums))
-uuid = Combine(
-    Word(hexnums, exact=8) + Literal('-') + Word(hexnums, exact=4) + Literal('-') +
-    Word(hexnums, exact=4) + Literal('-') + Word(hexnums, exact=4) + Literal('-') +
-    Word(hexnums, exact=12)
-)
-float = Combine(Optional(unary_minus) + Word(nums) + Literal('.') + Word(nums))
+class RPar(Grammar):
+    grammar = OP(')')
 
-storage_type = CaselessKeyword('ascii') | CaselessKeyword('bigint') | CaselessKeyword('blob') \
-    | CaselessKeyword('boolean') | CaselessKeyword('counter') | CaselessKeyword('decimal') | CaselessKeyword('double') \
-    | CaselessKeyword('float') | CaselessKeyword('int') | CaselessKeyword('text') | CaselessKeyword('timestamp') \
-    | CaselessKeyword('uuid') | CaselessKeyword('varchar') | CaselessKeyword('varint')
+class Identifier(Grammar):
+    grammar = WORD('a-zA-Z', 'a-zA-Z0-9_')
 
-term = CaselessKeyword("key") | uuid | identifier | string_literal | float | integer
-name = identifier | string_literal | integer
+class StringLiteral(Grammar):
+    grammar = QuotedString
 
-consistency = CaselessKeyword('any') | CaselessKeyword('one') | (Optional(CaselessKeyword('local') \
-    | CaselessKeyword('each')) + CaselessKeyword('quorum')) | CaselessKeyword('all')
+class Integer(Grammar):
+    grammar = OR(L('0'), (OPTIONAL(L('-')), WORD('1-9', '0-9')))
 
-use_statement = CaselessKeyword('use') + term
+class UUID(Grammar):
+    grammar = RE(r'[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}')
 
-relation_operator = Literal('=') | Literal('<=') | Literal('>=') | Literal('<') | Literal('>')
-relation = Group(term + relation_operator + term)
-select_where_clause = Group(delimitedList(relation, delim=CaselessKeyword('and'))) \
-    | Group(term + CaselessKeyword('in') + lpar + Group(delimitedList(term)) + rpar)
-column_range = Group(term + Literal('..') + term) | Literal('*')
-count_target = Literal('*') | Literal('1')
-what_to_select = (Optional(CaselessKeyword('first') + integer) + Optional(CaselessKeyword('reversed')) + column_range) \
-    | (CaselessKeyword('count') + lpar + count_target + rpar) \
-    | Group(delimitedList(term))
-select_statement = CaselessKeyword('select') + what_to_select + CaselessKeyword('from') + Combine(Optional(name + Literal('.')) + name) \
-    + Optional(CaselessKeyword('using') + CaselessKeyword('consistency') + consistency) \
-    + Optional(CaselessKeyword('where') + select_where_clause) + Optional(CaselessKeyword('limit') + integer)
+class Float(Grammar):
+    grammar = (OPTIONAL(L('-')), WORD('1-9', '0-9'), L('.'), WORD('0-9'))
 
-delete_option = Group(CaselessKeyword('consistency') + consistency) | Group(CaselessKeyword('timestamp') + integer)
-using_option =  delete_option | Group(CaselessKeyword('ttl') + integer)
-using_clause = CaselessKeyword('using') + Group(delimitedList(using_option, delim=CaselessKeyword('and')))
-insert_statement = CaselessKeyword('insert') + CaselessKeyword('into') + name + lpar + Group(delimitedList(term)) \
-    + rpar + CaselessKeyword('values') + lpar + Group(delimitedList(term)) + rpar \
-    + Optional(using_clause)
+class StorageType(Grammar):
+    grammar = OR(CK('ascii'), CK('bigint'), CK('blob'), CK('boolean'), CK('counter'), CK('decimal'), CK('double'), CK('float'),
+        CK('int'), CK('text'), CK('timestamp'), CK('uuid'), CK('varchar'), CK('varint'))
 
-update_where_clause = (term + Literal('=') + term) | (term + CaselessKeyword('in') + lpar + Group(delimitedList(term)) \
-    + rpar)
-assignment = Group(term + Literal('=') + term + Literal('+') + term) \
-    | Group(term + Literal('=') + term + Literal('-') + term) \
-    | Group(term + Literal('=') + term)
-update_statement = CaselessKeyword('update') + name + Optional(using_clause) + CaselessKeyword('set') \
-    + Group(delimitedList(assignment)) + CaselessKeyword('where') + Group(update_where_clause)
+class Term(Grammar):
+    grammar = OR(CK('key'), UUID, Identifier, StringLiteral, Float, Integer)
 
-delete_statement = CaselessKeyword('delete') + (CaselessKeyword('from') + Group(Empty()) \
-    | (Optional(Group(delimitedList(term))) + CaselessKeyword('from'))) + name \
-    + Optional(CaselessKeyword('using') + Group(delimitedList(delete_option, delim=CaselessKeyword('and')))) \
-    + CaselessKeyword('where') + Group(update_where_clause)
+class Name(Grammar):
+    grammar = Identifier | StringLiteral | Integer
 
-truncate_statement = CaselessKeyword('truncate') + name
+class Consistency(Grammar):
+    grammar = OR(CK('any'), CK('one'), (OPTIONAL(CK('local') | CK('each')), CK('quorum')), CK('all'))
 
-batch_statement_member = insert_statement | update_statement | delete_statement
-batch_statement = CaselessKeyword('begin') + CaselessKeyword('batch') + Optional(using_clause) \
-    + Group(delimitedList(batch_statement_member, delim=semicolon)) + CaselessKeyword('apply') + CaselessKeyword('batch')
+class UseStatement(Grammar):
+    grammar = (CK('use'), Term)
 
-option_name = Combine(delimitedList(identifier, delim=':'))
-option_value = string_literal | identifier | integer
-create_keyspace_statement = CaselessKeyword('create') + CaselessKeyword('keyspace') + name + CaselessKeyword('with') \
-    + Group(delimitedList(Group(option_name + Literal('=') + option_value), delim=CaselessKeyword('and')))
+class RelationOperator(Grammar):
+    grammar = OR(OP('='), OP('<='), OP('>='), OP("<"), OP('>'))
 
-column_family_option_value = storage_type | identifier | string_literal | float | integer
-create_column_family_statement = CaselessKeyword('create') + CaselessKeyword('columnfamily') + name \
-    + lpar + Group(Group(term + storage_type + CaselessKeyword('primary') + CaselessKeyword('key')) \
-    + ZeroOrMore(Group(Literal(',').suppress() + term + storage_type))) + rpar + Optional(CaselessKeyword('with') \
-    + Group(delimitedList(Group(identifier + Literal('=') + column_family_option_value), delim=CaselessKeyword('and'))))
+class Relation(Grammar):
+    grammar = (Term, RelationOperator, Term)
 
-create_index_statement = CaselessKeyword('create') + CaselessKeyword('index') + (CaselessKeyword('on') | identifier \
-    + CaselessKeyword('on')) + name + lpar + term + rpar
+class SelectWhereClause(Grammar):
+    grammar = OR(LIST_OF(Relation, sep=CK('and')), (Term, CK('in'), LPar, LIST_OF(Term), RPar))
 
-drop_keyspace_statement = CaselessKeyword('drop') + CaselessKeyword('keyspace') + name
-drop_column_family_statement = CaselessKeyword('drop') + CaselessKeyword('columnfamily') + name
-drop_index_statement = CaselessKeyword('drop') + CaselessKeyword('index') + name
+class ColumnRange(Grammar):
+    grammar = OR((Term, OP('..'), Term), OP('*'))
 
-alter_instructions = (CaselessKeyword('alter') + name + CaselessKeyword('type') + storage_type) \
-    | (CaselessKeyword('add') + name + storage_type) | (CaselessKeyword('drop') + name)
-alter_column_family_statement = CaselessKeyword('alter') + CaselessKeyword('columnfamily') + name + alter_instructions
+class CountTarget(Grammar):
+    grammar = OR(OP('*'), OP('1'))
 
-schema_change_statement = create_keyspace_statement | create_column_family_statement | create_index_statement \
-    | drop_keyspace_statement | drop_column_family_statement | drop_index_statement | alter_column_family_statement
-data_change_statement = insert_statement | update_statement | batch_statement | delete_statement | truncate_statement
-statement_body = use_statement | select_statement | data_change_statement | schema_change_statement
-statement = statement_body + semicolon
+class WhatToSelect(Grammar):
+    grammar = OR(
+        (OPTIONAL(CK('first'), Integer, OPTIONAL(CK('reversed'))), ColumnRange),
+        (CK('count'), LPar, CountTarget, RPar), LIST_OF(Term)
+    )
+
+class SelectStatement(Grammar):
+    grammar = (
+        CK('select'), WhatToSelect, CK('from'), OPTIONAL(Name, OP('.')), Name,
+        OPTIONAL(CK('using'), CK('consistency'), Consistency),
+        OPTIONAL(CK('where'), SelectWhereClause),
+        OPTIONAL(CK('limit'), Integer)
+    )
+
+class DeleteOption(Grammar):
+    grammar = OR((CK('consistency'), Consistency), (CK('timestamp'), Integer))
+
+class UsingOption(Grammar):
+    grammar = OR(DeleteOption, (CK('ttl'), Integer))
+
+class UsingClause(Grammar):
+    grammar = (CK('using'), LIST_OF(UsingOption, sep=CK('and')))
+
+class InsertStatement(Grammar):
+    grammar = (CK('insert'), CK('into'), Name, LPar, LIST_OF(Term), RPar, CK('values'), LPar, LIST_OF(Term), RPar, OPTIONAL(UsingClause))
+
+class UpdateWhereClause(Grammar):
+    grammar = OR((Term, OP('='), Term), (Term, CK('in'), LPar, LIST_OF(Term), RPar))
+
+class Assignment(Grammar):
+    grammar = OR(
+        (Term, OP('='), Term, OP('+'), Term),
+        (Term, OP('='), Term, OP('-'), Term),
+        (Term, OP('='), Term),
+    )
+
+class UpdateStatement(Grammar):
+    grammar = (CK('update'), Name, OPTIONAL(UsingClause), CK('set'), LIST_OF(Assignment), CK('where'), UpdateWhereClause)
+
+class DeleteStatement(Grammar):
+    grammar = (CK('delete'), OPTIONAL(LIST_OF(Term)), CK('from'), Name, OPTIONAL(CK('using'), LIST_OF(DeleteOption, sep=CK('and'))), CK('where'), UpdateWhereClause)
+
+class TruncateStatement(Grammar):
+    grammar = (CK('truncate'), Name)
+
+class BatchStatementMember(Grammar):
+    grammar = OR(InsertStatement, UpdateStatement, DeleteStatement)
+
+class BatchStatement(Grammar):
+    grammar = (CK('begin'), CK('batch'), OPTIONAL(UsingClause), LIST_OF(BatchStatementMember, sep=';'), CK('apply'), CK('batch'))
+
+class OptionName(Grammar):
+    grammar = LIST_OF(Identifier, sep=':')
+
+class OptionValue(Grammar):
+    grammar = OR(StringLiteral, Identifier, Integer)
+    
+class CreateKeyspaceStatement(Grammar):
+    grammar = (CK('create'), CK('keyspace'), Name, CK('with'), LIST_OF((OptionName, OP('='), OptionValue), sep=CK('and')))
+    
+class ColumFamilyOptionValue(Grammar):
+    grammar = OR(StorageType, Identifier, StringLiteral, Float, Integer)
+    
+class CreateColumnFamilyStatement(Grammar):
+    grammar = (
+        CK('create'), CK('columnfamily'), Name, LPar, Term, StorageType, CK('primary'), CK('key'),
+        ZERO_OR_MORE((OP(','), Term, StorageType)), RPar,
+        OPTIONAL(CK('with'), LIST_OF((Identifier, OP('='), ColumFamilyOptionValue), sep=CK('and')))
+    )
+
+class CreateIndexStatement(Grammar):
+    grammar = (CK('create'), CK('index'), OPTIONAL(Identifier), CK('on'), Name, LPar, Term, RPar)
+
+class DropKeyspaceStatement(Grammar):
+    grammar = (CK('drop'), CK('keyspace'), Name)
+
+class DropColumnFamilyStatement(Grammar):
+    grammar = (CK('drop'), CK('columnfamily'), Name)
+
+class DropIndexStatement(Grammar):
+    grammar = (CK('drop'), CK('index'), Name)
+
+class AlterInstructions(Grammar):
+    grammar = OR(
+        (CK('alter'), Name, CK('type'), StorageType),
+        (CK('add'), Name, StorageType),
+        (CK('drop'), Name)
+    )
+
+class AlterColumnFamilyStatement(Grammar):
+    grammar = (CK('alter'), CK('columnfamily'), Name, AlterInstructions)
+
+class SchemaChangeStatement(Grammar):
+    grammar = OR(
+        CreateKeyspaceStatement, CreateColumnFamilyStatement, CreateIndexStatement,
+        DropKeyspaceStatement, DropColumnFamilyStatement, DropIndexStatement,
+        AlterColumnFamilyStatement
+    )
+
+class DataChangeStatement(Grammar):
+    grammar = OR(InsertStatement, UpdateStatement, BatchStatement, DeleteStatement, TruncateStatement)
+
+class StatementBody(Grammar):
+    grammar = OR(UseStatement, SelectStatement, DataChangeStatement, SchemaChangeStatement)
+
+class Statement(Grammar):
+    grammar = (StatementBody, OP(';'))
 
 if __name__ == '__main__':
     tests = [
@@ -160,5 +234,19 @@ APPLY BATCH;""",
         "ALTER COLUMNFAMILY addamsFamily DROP gender;",
     ]
 
+    #for row in generate_ebnf(Statement):
+    #    print row.rstrip()
+
+    parser = Statement.parser()
+    try:
+        parser.parse_string('select', eof=True)
+    except ParseError as e:
+        print [t.keyword for t in e.expected if t.grammar_name[:2] in ['OP', 'CK']]
+
     for test in tests:
-        print statement.parseString(test)
+        parser.reset()
+        print test
+        try:
+            print 'OK', parser.parse_string(test, eof=True).terminals()
+        except ParseError as e:
+            raise Exception(e.message)
